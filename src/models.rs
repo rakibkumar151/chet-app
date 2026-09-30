@@ -1,52 +1,81 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+// Auth
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SignupRequest {
+    pub email: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub gender: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LoginRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuthResponse {
+    pub token: String,
+    pub uid: String,
+    pub first_name: String,
+}
+
+// User Profile
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserPublic {
+    pub uid: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub gender: String,
+    pub is_online: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppClient {
     pub app_id: String,
     pub api_key_hash: String,
     pub webhook_url: Option<String>,
 }
 
-// 1. User Profile & Presence Management
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub uid: String,
     pub username: String,
-    pub profile_pic: Option<String>, // URL or Base64 Encrypted String
-    pub is_online: bool,             // Shows if active
-    pub last_seen: i64,              // Timestamp for "Last seen at..."
+    pub profile_pic: Option<String>,
+    pub is_online: bool,
+    pub last_seen: i64,
 }
 
-// 2. Conversation handling (Supports both 1-on-1 and Group Chats)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Conversation {
     pub id: String,
     pub is_group: bool,
-    pub name: Option<String>, // Group Name (Null if 1-on-1)
-    pub members: Vec<String>, // List of UIDs (2 people, or 100 people)
+    pub name: Option<String>,
+    pub members: Vec<String>,
 }
 
-// 3. Message Structure with Likes & Delivery Status
+// Message Structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Message {
     pub id: String,
-    pub conversation_id: String, // Links to Conversation (instead of just to_id)
+    pub conversation_id: String,
     pub from_id: String,
-    pub msg_type: String,        // "text", "image", "voice"
-    pub payload: String,         // Encrypted payload
-    pub status: String,          // "sent", "delivered", "read"
-    pub likes_count: i32,        // Message Like/Reaction system
-    pub created_at: i64,         // Unix Timestamp
+    pub msg_type: String,
+    pub payload: String,
+    pub status: String,
+    pub likes_count: i32,
+    pub created_at: i64,
 }
 
-// 4. WebSocket Payload (Realtime Actions)
+// WebSocket Payload (Realtime Actions)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WsMessagePayload {
-    pub action: String, // "send", "ack", "typing", "presence", "like"
+    pub action: String,
     pub message: Option<Message>,
-    pub message_id: Option<String>, 
+    pub message_id: Option<String>,
     pub conversation_id: Option<String>,
-    pub typing_status: Option<bool>, // Realtime typing indicator
+    pub typing_status: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

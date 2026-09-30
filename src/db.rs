@@ -36,12 +36,15 @@ impl DbContext {
             "INSERT OR IGNORE INTO apps (app_id, api_key_hash) VALUES ('test_app_id', 'dummy_hash')", ()
         ).await;
 
-        // 1. Users table (Strictly Server-Side, NO raw user data sent to app)
+        // 1. Users table with full auth info
         conn.execute(
             "CREATE TABLE IF NOT EXISTS users (
                 uid TEXT PRIMARY KEY,
-                username TEXT NOT NULL,
-                profile_pic TEXT,
+                email TEXT UNIQUE NOT NULL,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                gender TEXT NOT NULL,
+                token TEXT UNIQUE NOT NULL,
                 is_online BOOLEAN DEFAULT false,
                 last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
             )", ()
