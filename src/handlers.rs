@@ -55,9 +55,9 @@ pub async fn login(
     let conn = state.db.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut rows = conn.query(
-        "SELECT uid, first_name, token FROM users WHERE email = ?1",
-        libsql::params![req.email]
-    ).await.map_err(|_| (StatusCode::UNAUTHORIZED, "Email not found".to_string()))?;
+        "SELECT uid, first_name, token FROM users WHERE email = ?1 AND password = ?2",
+        libsql::params![req.email, req.password]
+    ).await.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid email or password".to_string()))?;
 
     if let Ok(Some(row)) = rows.next().await {
         let uid: String = row.get(0).unwrap_or_default();

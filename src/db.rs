@@ -44,11 +44,14 @@ impl DbContext {
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 gender TEXT NOT NULL,
+                password TEXT NOT NULL,
                 token TEXT UNIQUE NOT NULL,
                 is_online BOOLEAN DEFAULT false,
                 last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
             )", ()
         ).await.unwrap();
+
+        let _ = conn.execute("ALTER TABLE users ADD COLUMN password TEXT NOT NULL DEFAULT ''", ()).await;
 
         // 2. Conversations table (Supports groups)
         conn.execute(

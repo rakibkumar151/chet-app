@@ -7,11 +7,13 @@ pub struct SignupRequest {
     pub first_name: String,
     pub last_name: String,
     pub gender: String,
+    pub password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LoginRequest {
     pub email: String,
+    pub password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -65,10 +65,16 @@ pub async fn get_ui_screen(
             background_color: "#FFFFFF".to_string(),
             root: UIComponent::Column {
                 align: Some("center".to_string()),
-                padding_top: Some(32), padding_bottom: Some(32), padding_start: Some(24), padding_end: Some(24),
+                padding_top: Some(16), padding_bottom: Some(32), padding_start: Some(24), padding_end: Some(24),
                 margin_top: None, margin_bottom: None, margin_start: None, margin_end: None, weight: None,
                 children: vec![
-                    UIComponent::Text { text: "Create a new account".to_string(), color: Some("#1C1E21".to_string()), size: Some(22), align: Some("center".to_string()), bold: Some(true), margin_top: None, margin_bottom: None, margin_start: None, margin_end: None, padding_top: None, padding_bottom: None, padding_start: None, padding_end: None, weight: None },
+                    UIComponent::Row {
+                        bg_color: None, margin_top: None, margin_bottom: Some(16), margin_start: None, margin_end: None, padding_top: None, padding_bottom: None, padding_start: None, padding_end: None, weight: None,
+                        children: vec![
+                            UIComponent::ButtonOutline { text: "← Back".to_string(), action_id: "go_login".to_string(), border_color: "#E4E6EB".to_string(), text_color: Some("#1C1E21".to_string()), margin_top: None, margin_bottom: None, margin_start: None, margin_end: Some(16), weight: None },
+                            UIComponent::Text { text: "Create a new account".to_string(), color: Some("#1C1E21".to_string()), size: Some(20), align: None, bold: Some(true), margin_top: None, margin_bottom: None, margin_start: None, margin_end: None, padding_top: None, padding_bottom: None, padding_start: None, padding_end: None, weight: Some(1.0) }
+                        ]
+                    },
                     UIComponent::Text { text: "It's quick and easy.".to_string(), color: Some("#606770".to_string()), size: Some(14), align: Some("center".to_string()), bold: None, margin_top: None, margin_bottom: None, margin_start: None, margin_end: None, padding_top: Some(4), padding_bottom: Some(20), padding_start: None, padding_end: None, weight: None },
                     UIComponent::Divider { margin_top: None, margin_bottom: None },
                     UIComponent::Spacer { height: 16 },
@@ -80,7 +86,8 @@ pub async fn get_ui_screen(
                         ]
                     },
                     UIComponent::Input { hint: "Mobile number or email".to_string(), field_key: "email".to_string(), input_type: "email".to_string(), margin_top: None, margin_bottom: Some(12), margin_start: None, margin_end: None, weight: None },
-                    UIComponent::Input { hint: "Gender (Male/Female)".to_string(), field_key: "gender".to_string(), input_type: "text".to_string(), margin_top: None, margin_bottom: Some(20), margin_start: None, margin_end: None, weight: None },
+                    UIComponent::Input { hint: "Gender (Male/Female)".to_string(), field_key: "gender".to_string(), input_type: "text".to_string(), margin_top: None, margin_bottom: Some(12), margin_start: None, margin_end: None, weight: None },
+                    UIComponent::Input { hint: "New password".to_string(), field_key: "password".to_string(), input_type: "password".to_string(), margin_top: None, margin_bottom: Some(20), margin_start: None, margin_end: None, weight: None },
                     UIComponent::Button { text: "Sign Up".to_string(), action_id: "do_signup".to_string(), bg_color: "#1877F2".to_string(), text_color: Some("#FFFFFF".to_string()), margin_top: None, margin_bottom: None, margin_start: None, margin_end: None, weight: None },
                     UIComponent::Spacer { height: 12 },
                     UIComponent::Text { text: "Already have an account?".to_string(), color: Some("#1877F2".to_string()), size: Some(14), align: Some("center".to_string()), bold: None, margin_top: None, margin_bottom: None, margin_start: None, margin_end: None, padding_top: None, padding_bottom: None, padding_start: None, padding_end: None, weight: None }
