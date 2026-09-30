@@ -50,6 +50,22 @@ pub async fn get_ui_screen(
             };
             Ok(Json(layout))
         },
+        "chat" => {
+            let layout = ScreenLayout {
+                screen_id: "chat_screen".to_string(),
+                background_color: "#121212".to_string(),
+                root: UIComponent::Column {
+                    children: vec![
+                        UIComponent::Text { text: "Zero Chat".to_string(), color: "#0084FF".to_string(), size: 22 },
+                        UIComponent::Text { text: "Secure end-to-end messaging".to_string(), color: "#888888".to_string(), size: 13 },
+                        UIComponent::ChatBubble { text: "Connected to Zero Server!".to_string(), is_sender: false },
+                        UIComponent::ChatBubble { text: "All messages are server-processed. Zero data leaks.".to_string(), is_sender: false },
+                        UIComponent::Button { text: "Send Test Message".to_string(), action_id: "send_test".to_string(), bg_color: "#0084FF".to_string() }
+                    ]
+                }
+            };
+            Ok(Json(layout))
+        },
         _ => Err((StatusCode::NOT_FOUND, "Screen not found".to_string()))
     }
 }
