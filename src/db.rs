@@ -21,6 +21,10 @@ impl DbContext {
 
     pub async fn migrate(&self) {
         let conn = self.db.connect().unwrap();
+        let _ = conn.execute("DROP TABLE IF EXISTS messages_v2", ()).await;
+        let _ = conn.execute("DROP TABLE IF EXISTS conversation_members", ()).await;
+        let _ = conn.execute("DROP TABLE IF EXISTS conversations", ()).await;
+        let _ = conn.execute("DROP TABLE IF EXISTS users", ()).await;
         
         // 0. Apps table
         conn.execute(

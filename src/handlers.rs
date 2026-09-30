@@ -34,8 +34,8 @@ pub async fn signup(
     let token = Uuid::new_v4().to_string(); // Simple token — swap for JWT in prod
 
     conn.execute(
-        "INSERT INTO users (uid, email, first_name, last_name, gender, token) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        libsql::params![uid.clone(), req.email, req.first_name.clone(), req.last_name, req.gender]
+        "INSERT INTO users (uid, email, first_name, last_name, gender, password, token) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        libsql::params![uid.clone(), req.email, req.first_name.clone(), req.last_name, req.gender, req.password, token.clone()]
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(AuthResponse {
