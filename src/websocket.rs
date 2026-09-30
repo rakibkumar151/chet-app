@@ -124,9 +124,19 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, app_id: String, 
                             route_action(&state_clone, &app_id_clone, typing_payload).await;
                         },
                         "like" => {
-                            // Like / Reaction Routing
                             info!("User {} liked a message", uid_clone);
-                            // TODO: Increment like_count in DB and route update
+                        }
+                        "button_click" | "send_test" => {
+                            // App button was clicked — echo back a chat bubble via WebSocket
+                            info!("User {} triggered action: {}", uid_clone, payload.action);
+                            let echo = WsMessagePayload {
+                                action: "ui_update".to_string(),
+                                message: None,
+                                message_id: None,
+                                conversation_id: None,
+                                typing_status: None,
+                            };
+                            let _ = tx.send(echo).await;
                         }
                         _ => {
                             error!("Unknown WebSocket action received");
