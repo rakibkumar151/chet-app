@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:bookworm-slim as builder
+FROM rust:1.80-slim as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev
