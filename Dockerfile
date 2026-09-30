@@ -1,5 +1,8 @@
 # Build Stage
-FROM rust:1.80-slim as builder
+FROM rust:slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y pkg-config libssl-dev
 
 # Create a new empty shell project
 WORKDIR /usr/src/app
