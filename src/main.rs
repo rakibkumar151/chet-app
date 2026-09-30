@@ -50,7 +50,6 @@ fn main() {
                 .route("/api/v1/auth/login", axum::routing::post(handlers::login))
                 .route("/api/v1/messages/send", axum::routing::post(handlers::send_message))
                 .route("/api/v1/users", get(handlers::get_users))
-                .route("/api/v1/messages/send", axum::routing::post(handlers::send_message))
                 .route("/api/v1/messages/{other_uid}", get(handlers::get_history))
                 .with_state(shared_state)
                 .layer(cors);
