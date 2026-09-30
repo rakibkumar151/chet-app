@@ -6,10 +6,20 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev
 
 # Create a new empty shell project
 WORKDIR /usr/src/app
-COPY . .
 
-# Build for release
+# Copy over manifests
+COPY Cargo.toml Cargo.lock ./
+
+# Create a dummy main.rs to build and cache dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release
+RUN rm -rf src
+
+# Now copy actual source code
+COPY src ./src
+
+# Touch main.rs to force cargo to recompile our code, not just use the cached dummy
+RUN touch src/main.rs && cargo build --release
 
 # Runtime Stage
 FROM rust:slim
