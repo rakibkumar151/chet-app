@@ -48,6 +48,7 @@ fn main() {
                 .route("/api/v1/screen/{screen_name}", get(sdui::get_ui_screen))
                 .route("/api/v1/auth/signup", axum::routing::post(handlers::signup))
                 .route("/api/v1/auth/login", axum::routing::post(handlers::login))
+                .route("/api/v1/messages/send", axum::routing::post(handlers::send_message))
                 .route("/api/v1/users", get(handlers::get_users))
                 .route("/api/v1/messages/send", axum::routing::post(handlers::send_message))
                 .route("/api/v1/messages/{other_uid}", get(handlers::get_history))
