@@ -4,6 +4,7 @@ mod models;
 mod state;
 mod websocket;
 mod worker;
+mod sdui;
 
 use axum::{
     routing::get,
@@ -44,6 +45,7 @@ fn main() {
             let app = Router::new()
                 .route("/health", get(|| async { "OK" }))
                 .route("/ws", get(websocket::ws_handler))
+                .route("/api/v1/screen/{screen_name}", get(sdui::get_ui_screen))
                 .route("/api/v1/messages/send", axum::routing::post(handlers::send_message))
                 .route("/api/v1/messages/{channel_id}", get(handlers::get_history))
                 .with_state(shared_state)
