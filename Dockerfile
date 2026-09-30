@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:1.80-slim as builder
+FROM rust:slim as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev
@@ -12,7 +12,7 @@ COPY . .
 RUN cargo build --release
 
 # Runtime Stage
-FROM debian:bookworm-slim
+FROM rust:slim
 
 # Install dependencies (openssl is often needed for reqwest/axum)
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
