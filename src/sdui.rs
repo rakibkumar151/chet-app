@@ -583,36 +583,62 @@ pub async fn get_ui_screen(
             uids.sort();
             let true_conv_id = format!("{}_{}", uids[0], uids[1]);
 
-            let conn = state.db.db.connect().unwrap();
+            let conn1 = state.db.db.connect().unwrap();
+            let conn2 = state.db.db.connect().unwrap();
+            let conn3 = state.db.db.connect().unwrap();
 
-            // Automatically mark all incoming messages in this conversation as READ
-            if !my_uid.is_empty() {
-                let _ = conn.execute(
-                    "UPDATE messages_v2 SET status = 'read' WHERE conversation_id = ?1 AND from_id != ?2 AND status != 'read'",
-                    libsql::params![true_conv_id.clone(), my_uid.clone()]
-                ).await;
-
-                // Real-time WebSocket Read Receipt push to sender
-                let clients = state.clients.read().await;
-                if let Some(app_clients) = clients.get("zero_lite") {
-                    if let Some((_, tx)) = app_clients.get(other_uid) {
-                        let push = crate::models::WsMessagePayload {
-                            action: "read_receipt".to_string(),
-                            message: None,
-                            message_id: None,
-                            conversation_id: Some(true_conv_id.clone()),
-                            typing_status: None,
-                        };
-                        let _ = tx.send(push).await;
+            let update_future = async {
+                if !my_uid.is_empty() {
+                    let _ = conn1.execute(
+                        "UPDATE messages_v2 SET status = 'read' WHERE conversation_id = ?1 AND from_id != ?2 AND status != 'read'",
+                        libsql::params![true_conv_id.clone(), my_uid.clone()]
+                    ).await;
+                    
+                    // Real-time WebSocket Read Receipt push to sender
+                    let clients = state.clients.read().await;
+                    if let Some(app_clients) = clients.get("zero_lite") {
+                        if let Some((_, tx)) = app_clients.get(other_uid) {
+                            let push = crate::models::WsMessagePayload {
+                                action: "read_receipt".to_string(),
+                                message: None,
+                                message_id: None,
+                                conversation_id: Some(true_conv_id.clone()),
+                                typing_status: None,
+                            };
+                            let _ = tx.send(push).await;
+                        }
                     }
                 }
-            }
+            };
+
+            let conv_pattern = format!("%{}%", other_uid);
+            let msgs_future = async {
+                let mut rows_opt = conn3.query("SELECT from_id, payload, status, created_at FROM messages_v2 WHERE conversation_id = ?1 ORDER BY created_at ASC", libsql::params![true_conv_id.clone()]).await.ok();
+                
+                // Fallback to LIKE if no exact match (as in original code)
+                if let Some(ref mut rows) = rows_opt {
+                    if let Ok(None) = rows.next().await {
+                        rows_opt = conn3.query("SELECT from_id, payload, status, created_at FROM messages_v2 WHERE conversation_id LIKE ?1 ORDER BY created_at ASC", libsql::params![conv_pattern]).await.ok();
+                    } else {
+                        rows_opt = conn3.query("SELECT from_id, payload, status, created_at FROM messages_v2 WHERE conversation_id = ?1 ORDER BY created_at ASC", libsql::params![true_conv_id.clone()]).await.ok();
+                    }
+                } else {
+                    rows_opt = conn3.query("SELECT from_id, payload, status, created_at FROM messages_v2 WHERE conversation_id LIKE ?1 ORDER BY created_at ASC", libsql::params![conv_pattern]).await.ok();
+                }
+                rows_opt
+            };
+
+            let ((), user_res, msgs_res_opt) = tokio::join!(
+                update_future,
+                conn2.query("SELECT first_name, last_name, is_online, last_seen FROM users WHERE uid = ?1", libsql::params![other_uid]),
+                msgs_future
+            );
 
             let mut other_name = "User".to_string();
             let mut is_online = false;
             let mut last_seen_str = String::new();
             
-            if let Ok(mut rows) = conn.query("SELECT first_name, last_name, is_online, last_seen FROM users WHERE uid = ?1", libsql::params![other_uid]).await {
+            if let Ok(mut rows) = user_res {
                 if let Ok(Some(row)) = rows.next().await {
                     let fn_name: String = row.get(0).unwrap_or_default();
                     let ln_name: String = row.get(1).unwrap_or_default();
@@ -661,27 +687,14 @@ pub async fn get_ui_screen(
                 ts: i64,
             }
 
-            let conv_pattern = format!("%{}%", other_uid);
             let mut raw_msgs: Vec<RawMsg> = Vec::new();
-            if let Ok(mut rows) = conn.query("SELECT from_id, payload, status, created_at FROM messages_v2 WHERE conversation_id = ?1 ORDER BY created_at ASC", libsql::params![true_conv_id.clone()]).await {
+            if let Some(mut rows) = msgs_res_opt {
                 while let Ok(Some(row)) = rows.next().await {
                     let from_id: String = row.get(0).unwrap_or_default();
                     let payload: Vec<u8> = row.get(1).unwrap_or_default();
                     let status: String = row.get(2).unwrap_or_else(|_| "sent".to_string());
                     let ts: i64 = row.get(3).unwrap_or(0);
                     raw_msgs.push(RawMsg { from_id, payload, status, ts });
-                }
-            }
-
-            if raw_msgs.is_empty() {
-                if let Ok(mut rows) = conn.query("SELECT from_id, payload, status, created_at FROM messages_v2 WHERE conversation_id LIKE ?1 ORDER BY created_at ASC", libsql::params![conv_pattern]).await {
-                    while let Ok(Some(row)) = rows.next().await {
-                        let from_id: String = row.get(0).unwrap_or_default();
-                        let payload: Vec<u8> = row.get(1).unwrap_or_default();
-                        let status: String = row.get(2).unwrap_or_else(|_| "sent".to_string());
-                        let ts: i64 = row.get(3).unwrap_or(0);
-                        raw_msgs.push(RawMsg { from_id, payload, status, ts });
-                    }
                 }
             }
 
