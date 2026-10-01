@@ -1,0 +1,6 @@
+{
+  "from_id": "userA",
+  "conversation_id": "userB",
+  "msg_type": "text",
+  "payload": "Hello Paneer!"
+}

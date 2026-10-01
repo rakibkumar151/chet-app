@@ -21,11 +21,8 @@ impl DbContext {
 
     pub async fn migrate(&self) {
         let conn = self.db.connect().unwrap();
-        let _ = conn.execute("DROP TABLE IF EXISTS messages_v2", ()).await;
-        let _ = conn.execute("DROP TABLE IF EXISTS conversation_members", ()).await;
-        let _ = conn.execute("DROP TABLE IF EXISTS conversations", ()).await;
-        let _ = conn.execute("DROP TABLE IF EXISTS users", ()).await;
         
+
         // 0. Apps table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS apps (
@@ -37,7 +34,7 @@ impl DbContext {
         ).await.unwrap();
 
         let _ = conn.execute(
-            "INSERT OR IGNORE INTO apps (app_id, api_key_hash) VALUES ('test_app_id', 'dummy_hash')", ()
+            "INSERT OR IGNORE INTO apps (app_id, api_key_hash) VALUES ('zero_lite', 'dummy_hash')", ()
         ).await;
 
         // 1. Users table with full auth info
@@ -56,6 +53,7 @@ impl DbContext {
         ).await.unwrap();
 
         let _ = conn.execute("ALTER TABLE users ADD COLUMN password TEXT NOT NULL DEFAULT ''", ()).await;
+        let _ = conn.execute("UPDATE users SET is_online = 0", ()).await;
 
         // 2. Conversations table (Supports groups)
         conn.execute(

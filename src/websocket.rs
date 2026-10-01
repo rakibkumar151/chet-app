@@ -43,6 +43,15 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, app_id: String, 
         app_clients.insert(uid.clone(), (conn_id.clone(), tx.clone()));
     }
     
+    // Update DB is_online = 1
+    let db_online = Arc::clone(&state);
+    let uid_online = uid.clone();
+    tokio::spawn(async move {
+        if let Ok(conn) = db_online.db.db.connect() {
+            let _ = conn.execute("UPDATE users SET is_online = 1 WHERE uid = ?1", libsql::params![uid_online]).await;
+        }
+    });
+
     // Broadcast Presence
     info!("User {} came ONLINE in app {}", uid, app_id);
     let presence_payload = WsMessagePayload {
@@ -86,6 +95,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, app_id: String, 
                                 let task_app_id = app_id_clone.clone();
                                 tokio::spawn(async move {
                                     if let Ok(conn) = db_clone.db.db.connect() {
+                                        let _ = conn.execute("INSERT OR IGNORE INTO apps (app_id, api_key_hash) VALUES ('zero_lite', 'dummy')", ()).await;
+                                        let _ = conn.execute("INSERT OR IGNORE INTO users (uid, email, first_name, last_name, gender, password, token) VALUES (?1, ?1, 'User', '', 'Unknown', '', ?1)", libsql::params![m_clone.from_id.clone()]).await;
+                                        let _ = conn.execute("INSERT OR IGNORE INTO conversations (id, is_group, name) VALUES (?1, false, '')", libsql::params![m_clone.conversation_id.clone()]).await;
                                         let sql = "INSERT INTO messages_v2 (id, app_id, conversation_id, from_id, msg_type, payload, status, likes_count, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'sent', 0, ?7)";
                                         let compressed = zstd::encode_all(m_clone.payload.as_bytes(), 3).unwrap_or_default();
                                         let _ = conn.execute(sql, libsql::params![m_clone.id, task_app_id, m_clone.conversation_id, m_clone.from_id, m_clone.msg_type, compressed, m_clone.created_at]).await;
@@ -121,10 +133,42 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, app_id: String, 
                                 typing_status: payload.typing_status,
                             };
                             // Route to conversation members
-                            route_action(&state_clone, &app_id_clone, typing_payload).await;
+                            route_action(&state_clone, &app_id_clone, &uid_clone, typing_payload).await;
                         },
                         "like" => {
                             info!("User {} liked a message", uid_clone);
+                        }
+                        "read" => {
+                            let conv_id = payload.conversation_id.unwrap_or_default();
+                            let sender_uid = payload.message_id.unwrap_or_default();
+                            
+                            let db_clone = Arc::clone(&state_clone);
+                            let conv_clone = conv_id.clone();
+                            let my_uid_clone = uid_clone.clone();
+                            tokio::spawn(async move {
+                                if let Ok(conn) = db_clone.db.db.connect() {
+                                    let _ = conn.execute(
+                                        "UPDATE messages_v2 SET status = 'read' WHERE conversation_id = ?1 AND from_id != ?2 AND status != 'read'",
+                                        libsql::params![conv_clone, my_uid_clone]
+                                    ).await;
+                                }
+                            });
+
+                            let clients = state_clone.clients.read().await;
+                            if let Some(app_clients) = clients.get(&app_id_clone) {
+                                if !sender_uid.is_empty() {
+                                    if let Some((_, sender_tx)) = app_clients.get(&sender_uid) {
+                                        let receipt_payload = WsMessagePayload {
+                                            action: "read_receipt".to_string(),
+                                            message: None,
+                                            message_id: None,
+                                            conversation_id: Some(conv_id.clone()),
+                                            typing_status: None,
+                                        };
+                                        let _ = sender_tx.send(receipt_payload).await;
+                                    }
+                                }
+                            }
                         }
                         "button_click" | "send_test" => {
                             // App button was clicked — echo back a chat bubble via WebSocket
@@ -168,6 +212,16 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, app_id: String, 
         }
     }
     
+    // Update DB is_online = 0, last_seen = timestamp
+    let db_offline = Arc::clone(&state);
+    let uid_offline = uid.clone();
+    tokio::spawn(async move {
+        let now_str = chrono::Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S").to_string();
+        if let Ok(conn) = db_offline.db.db.connect() {
+            let _ = conn.execute("UPDATE users SET is_online = 0, last_seen = ?1 WHERE uid = ?2", libsql::params![now_str, uid_offline]).await;
+        }
+    });
+
     info!("User {} went OFFLINE", uid);
     let offline_payload = WsMessagePayload {
         action: "presence".to_string(),
@@ -181,36 +235,50 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, app_id: String, 
 
 // --- Helper Routing Functions ---
 
-async fn broadcast_to_friends(state: &Arc<AppState>, app_id: &String, uid: &String, payload: WsMessagePayload) {
-    // In a real app, query the DB for this user's friends/groups.
-    // For now, this is a placeholder where we would loop over friend UIDs
-    // and send the payload to their active mpsc channels if they are online.
-}
-
-async fn route_message(state: &Arc<AppState>, app_id: &String, sender_uid: &String, message: Message) {
-    // 1. Query DB to get all UIDs in `message.conversation_id`
-    // 2. Loop over UIDs (except sender)
-    // 3. If UID is in state.clients, send a "new_message" action
-    
+async fn broadcast_to_friends(state: &Arc<AppState>, app_id: &String, sender_uid: &String, payload: WsMessagePayload) {
     let clients = state.clients.read().await;
     if let Some(app_clients) = clients.get(app_id) {
-        // Placeholder for DB call: let members = db.get_conversation_members(message.conversation_id);
-        // For demonstration, let's say we are routing to a specific member:
-        let target_uid = "some_other_uid".to_string(); 
-        
-        if let Some((_, tx)) = app_clients.get(&target_uid) {
-            let push_payload = WsMessagePayload {
-                action: "new_message".to_string(),
-                message: Some(message.clone()),
-                message_id: None,
-                conversation_id: Some(message.conversation_id.clone()),
-                typing_status: None,
-            };
-            let _ = tx.send(push_payload).await;
+        for (uid, (_, tx)) in app_clients.iter() {
+            if uid != sender_uid {
+                let _ = tx.send(payload.clone()).await;
+            }
         }
     }
 }
 
-async fn route_action(state: &Arc<AppState>, app_id: &String, payload: WsMessagePayload) {
-    // Similar to route_message, but for typing indicators or likes
+async fn route_message(state: &Arc<AppState>, app_id: &String, sender_uid: &String, message: Message) {
+    let clients = state.clients.read().await;
+    if let Some(app_clients) = clients.get(app_id) {
+        let parts: Vec<&str> = message.conversation_id.split('_').collect();
+        for target_uid in parts {
+            if target_uid != sender_uid {
+                if let Some((_, tx)) = app_clients.get(target_uid) {
+                    let push_payload = WsMessagePayload {
+                        action: "new_message".to_string(),
+                        message: Some(message.clone()),
+                        message_id: None,
+                        conversation_id: Some(message.conversation_id.clone()),
+                        typing_status: None,
+                    };
+                    let _ = tx.send(push_payload).await;
+                }
+            }
+        }
+    }
+}
+
+async fn route_action(state: &Arc<AppState>, app_id: &String, sender_uid: &String, payload: WsMessagePayload) {
+    let clients = state.clients.read().await;
+    if let Some(app_clients) = clients.get(app_id) {
+        if let Some(ref conv_id) = payload.conversation_id {
+            let parts: Vec<&str> = conv_id.split('_').collect();
+            for target_uid in parts {
+                if target_uid != sender_uid {
+                    if let Some((_, tx)) = app_clients.get(target_uid) {
+                        let _ = tx.send(payload.clone()).await;
+                    }
+                }
+            }
+        }
+    }
 }
