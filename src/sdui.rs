@@ -359,9 +359,9 @@ pub async fn get_ui_screen(
             let q_param = format!("%{}%", search_query);
             
             let query_res = if search_query.is_empty() {
-                conn.query("SELECT uid, first_name, last_name, is_online, last_seen FROM users WHERE uid != ?1 ORDER BY is_online DESC, uid ASC", libsql::params![my_uid.clone()]).await
+                conn.query("SELECT u.uid, u.first_name, u.last_name, u.is_online, u.last_seen, m.payload, m.created_at, m.from_id, m.status FROM users u LEFT JOIN messages_v2 m ON m.id = (SELECT id FROM messages_v2 WHERE conversation_id = CASE WHEN ?1 < u.uid THEN ?1 || '_' || u.uid ELSE u.uid || '_' || ?1 END ORDER BY rowid DESC LIMIT 1) WHERE u.uid != ?1 ORDER BY u.is_online DESC, u.uid ASC", libsql::params![my_uid.clone()]).await
             } else {
-                conn.query("SELECT uid, first_name, last_name, is_online, last_seen FROM users WHERE uid != ?1 AND (first_name LIKE ?2 OR last_name LIKE ?2) ORDER BY is_online DESC, uid ASC", libsql::params![my_uid.clone(), q_param.clone()]).await
+                conn.query("SELECT u.uid, u.first_name, u.last_name, u.is_online, u.last_seen, m.payload, m.created_at, m.from_id, m.status FROM users u LEFT JOIN messages_v2 m ON m.id = (SELECT id FROM messages_v2 WHERE conversation_id = CASE WHEN ?1 < u.uid THEN ?1 || '_' || u.uid ELSE u.uid || '_' || ?1 END ORDER BY rowid DESC LIMIT 1) WHERE u.uid != ?1 AND (u.first_name LIKE ?2 OR u.last_name LIKE ?2) ORDER BY u.is_online DESC, u.uid ASC", libsql::params![my_uid.clone(), q_param.clone()]).await
             };
             
             if let Ok(mut rows) = query_res {
@@ -380,33 +380,25 @@ pub async fn get_ui_screen(
                     let mut last_msg_ago = String::new();
                     let mut is_unread = false;
 
-                    let true_conv_id = {
-                        let mut uids = vec![my_uid.clone(), uid.clone()];
-                        uids.sort();
-                        format!("{}_{}", uids[0], uids[1])
-                    };
+                    let compressed: Vec<u8> = row.get(5).unwrap_or_default();
+                    if !compressed.is_empty() {
+                        let decompressed = zstd::decode_all(compressed.as_slice()).unwrap_or(compressed);
+                        let raw_text = String::from_utf8(decompressed).unwrap_or_default();
+                        last_msg_snippet = if raw_text.chars().count() > 22 { format!("{}...", raw_text.chars().take(22).collect::<String>()) } else { raw_text };
+                        
+                        let ts: i64 = row.get(6).unwrap_or(0);
+                        let from_id: String = row.get(7).unwrap_or_default();
+                        let status: String = row.get(8).unwrap_or_default();
 
-                    if let Ok(mut msg_rows) = conn.query("SELECT payload, created_at, from_id, status FROM messages_v2 WHERE conversation_id = ?1 ORDER BY rowid DESC LIMIT 1", libsql::params![true_conv_id]).await {
-                        if let Ok(Some(m_row)) = msg_rows.next().await {
-                            let compressed: Vec<u8> = m_row.get(0).unwrap_or_default();
-                            let decompressed = zstd::decode_all(compressed.as_slice()).unwrap_or(compressed);
-                            let raw_text = String::from_utf8(decompressed).unwrap_or_default();
-                            last_msg_snippet = if raw_text.chars().count() > 22 { format!("{}...", raw_text.chars().take(22).collect::<String>()) } else { raw_text };
-                            
-                            let ts: i64 = m_row.get(1).unwrap_or(0);
-                            let from_id: String = m_row.get(2).unwrap_or_default();
-                            let status: String = m_row.get(3).unwrap_or_default();
+                        let now = chrono::Utc::now().timestamp();
+                        let secs = (now - ts).max(0);
+                        last_msg_ago = if secs < 60 { "now".to_string() }
+                        else if secs < 3600 { format!("{}m", secs / 60) }
+                        else if secs < 86400 { format!("{}h", secs / 3600) }
+                        else { format!("{}d", secs / 86400) };
 
-                            let now = chrono::Utc::now().timestamp();
-                            let secs = (now - ts).max(0);
-                            last_msg_ago = if secs < 60 { "now".to_string() }
-                            else if secs < 3600 { format!("{}m", secs / 60) }
-                            else if secs < 86400 { format!("{}h", secs / 3600) }
-                            else { format!("{}d", secs / 86400) };
-
-                            if from_id != my_uid && status != "read" {
-                                is_unread = true;
-                            }
+                        if from_id != my_uid && status != "read" {
+                            is_unread = true;
                         }
                     }
 
