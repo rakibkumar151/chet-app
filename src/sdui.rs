@@ -315,7 +315,34 @@ pub async fn get_ui_screen(
             );
 
             let story_sql = "SELECT uid, first_name, is_online FROM users WHERE uid != ?1 ORDER BY is_online DESC, uid ASC LIMIT 10";
-            if let Ok(mut rows) = conn.query(story_sql, libsql::params![my_uid.clone()]).await {
+            
+            let search_query = params.get("q").map(|s| s.as_str()).unwrap_or("");
+            let q_param = format!("%{}%", search_query);
+            let chat_sql = if search_query.is_empty() {
+                "SELECT u.uid, u.first_name, u.last_name, u.is_online, u.last_seen, m.payload, m.created_at, m.from_id, m.status FROM users u LEFT JOIN messages_v2 m ON m.id = (SELECT id FROM messages_v2 WHERE conversation_id = CASE WHEN ?1 < u.uid THEN ?1 || '_' || u.uid ELSE u.uid || '_' || ?1 END ORDER BY rowid DESC LIMIT 1) WHERE u.uid != ?1 ORDER BY u.is_online DESC, u.uid ASC"
+            } else {
+                "SELECT u.uid, u.first_name, u.last_name, u.is_online, u.last_seen, m.payload, m.created_at, m.from_id, m.status FROM users u LEFT JOIN messages_v2 m ON m.id = (SELECT id FROM messages_v2 WHERE conversation_id = CASE WHEN ?1 < u.uid THEN ?1 || '_' || u.uid ELSE u.uid || '_' || ?1 END ORDER BY rowid DESC LIMIT 1) WHERE u.uid != ?1 AND (u.first_name LIKE ?2 OR u.last_name LIKE ?2) ORDER BY u.is_online DESC, u.uid ASC"
+            };
+            
+            let unread_sql = "SELECT COUNT(DISTINCT from_id) FROM messages_v2 WHERE conversation_id LIKE '%' || ?1 || '%' AND from_id != ?1 AND status != 'read'";
+
+            let chat_params: Vec<libsql::Value> = if search_query.is_empty() {
+                vec![my_uid.clone().into()]
+            } else {
+                vec![my_uid.clone().into(), q_param.clone().into()]
+            };
+
+            let conn2 = state.db.db.connect().unwrap();
+            let conn3 = state.db.db.connect().unwrap();
+
+            // Execute all three queries concurrently to eliminate network latency delays
+            let (story_res, chat_res, unread_res) = tokio::join!(
+                conn.query(story_sql, libsql::params![my_uid.clone()]),
+                conn2.query(chat_sql, chat_params),
+                conn3.query(unread_sql, libsql::params![my_uid.clone()])
+            );
+
+            if let Ok(mut rows) = story_res {
                 while let Ok(Some(row)) = rows.next().await {
                     let uid: String = row.get(0).unwrap_or_default();
                     if uid == my_uid { continue; }
@@ -355,16 +382,7 @@ pub async fn get_ui_screen(
             });
 
             // 4. Chat List
-            let search_query = params.get("q").map(|s| s.as_str()).unwrap_or("");
-            let q_param = format!("%{}%", search_query);
-            
-            let query_res = if search_query.is_empty() {
-                conn.query("SELECT u.uid, u.first_name, u.last_name, u.is_online, u.last_seen, m.payload, m.created_at, m.from_id, m.status FROM users u LEFT JOIN messages_v2 m ON m.id = (SELECT id FROM messages_v2 WHERE conversation_id = CASE WHEN ?1 < u.uid THEN ?1 || '_' || u.uid ELSE u.uid || '_' || ?1 END ORDER BY rowid DESC LIMIT 1) WHERE u.uid != ?1 ORDER BY u.is_online DESC, u.uid ASC", libsql::params![my_uid.clone()]).await
-            } else {
-                conn.query("SELECT u.uid, u.first_name, u.last_name, u.is_online, u.last_seen, m.payload, m.created_at, m.from_id, m.status FROM users u LEFT JOIN messages_v2 m ON m.id = (SELECT id FROM messages_v2 WHERE conversation_id = CASE WHEN ?1 < u.uid THEN ?1 || '_' || u.uid ELSE u.uid || '_' || ?1 END ORDER BY rowid DESC LIMIT 1) WHERE u.uid != ?1 AND (u.first_name LIKE ?2 OR u.last_name LIKE ?2) ORDER BY u.is_online DESC, u.uid ASC", libsql::params![my_uid.clone(), q_param.clone()]).await
-            };
-            
-            if let Ok(mut rows) = query_res {
+            if let Ok(mut rows) = chat_res {
                 let mut count = 0;
                 while let Ok(Some(row)) = rows.next().await {
                     count += 1;
@@ -482,10 +500,7 @@ pub async fn get_ui_screen(
             }
 
             let mut total_unread_chats: i64 = 0;
-            if let Ok(mut unread_rows) = conn.query(
-                "SELECT COUNT(DISTINCT from_id) FROM messages_v2 WHERE conversation_id LIKE '%' || ?1 || '%' AND from_id != ?1 AND status != 'read'",
-                libsql::params![my_uid.clone()]
-            ).await {
+            if let Ok(mut unread_rows) = unread_res {
                 if let Ok(Some(u_row)) = unread_rows.next().await {
                     total_unread_chats = u_row.get(0).unwrap_or(0);
                 }
