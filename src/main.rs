@@ -43,6 +43,8 @@ fn main() {
 
             // 2. Setup Routes
             let app = Router::new()
+                .route("/", get(|| async { "ALIVE" }))
+                .route("/active", get(|| async { axum::Json(serde_json::json!({ "status": "active", "service": "zero-messaging-api", "message": "Server is up and running" })) }))
                 .route("/health", get(|| async { "OK" }))
                 .route("/ws", get(websocket::ws_handler))
                 .route("/api/v1/screen/{*screen_name}", get(sdui::get_ui_screen))
